@@ -1,0 +1,47 @@
+wandb:
+  log: True
+  entity: "vision-language-leaderboard"
+  project: "heron-leaderboard"
+  run_name: "turing-motors/heron-chat-git-ja-stablelm-base-7b-v1" 
+  launch: false
+
+# basic information
+testmode: false
+torch_dtype: "fp16" # {fp16, bf16, fp32}
+# if you don't use api, please set "api" as "false"
+# if you use api, please select from "openai", "anthoropic", "google", "cohere", "mistral", "amazon_bedrock"
+api: false
+model_artifact: null
+processor_artifact: null
+tokenizer_artifact: null
+
+model:
+  _target_: heron.models.git_llm.git_japanese_stablelm_alpha.GitJapaneseStableLMAlphaForCausalLM.from_pretrained
+  pretrained_model_name_or_path:  "turing-motors/heron-chat-git-ja-stablelm-base-7b-v1"
+  torch_dtype: "float16"
+  ignore_mismatched_sizes: true
+
+processor:
+  _target_: transformers.AutoProcessor.from_pretrained
+  pretrained_model_name_or_path: "turing-motors/heron-chat-git-ja-stablelm-base-7b-v1"
+  
+tokenizer: # null
+  _target_: transformers.LlamaTokenizer.from_pretrained
+  pretrained_model_name_or_path: "novelai/nerdstash-tokenizer-v1"
+  args:
+    padding_side: "right"
+    additional_special_tokens: '["▁▁"]'
+
+datasets:
+  llava_bench_in_the_wild_artifact_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild:v0'
+  llava_bench_in_the_wild_reference_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild-reference:v0'
+  japanese_heron_bench_artifact_path: 'vision-language-leaderboard/heron-leaderboard/japanese-heron-bench:v0'
+  japanese_heron_bench_reference_path: 'vision-language-leaderboard/heron-leaderboard/heron-bench-reference:v0'
+
+generation:
+  args:
+    max_length: 256
+    do_sample: false
+    temperature: 0.0
+    eos_token_id_list: '[]'
+    no_repeat_ngram_size: 2

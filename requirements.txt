@@ -24,3 +24,5 @@ jupyterlab
 matplotlib
 japanize-matplotlib
 pre-commit
+hydra-core
+tenacity
