@@ -397,13 +397,22 @@ class ClaudeResponseGenerator:
         self.model_name = self.cfg.model.pretrained_model_name_or_path
         self.client = Anthropic(api_key=self.api_key)
 
-    def encode_image_to_base64(self, filepath):
+    def encode_image_to_base64(self, filepath, max_size=5*1024*1024*3//4):
         with Image.open(filepath) as img:
             if img.mode == 'RGBA':
                 img = img.convert('RGB')
-            with io.BytesIO() as buffer:
-                img.save(buffer, format="JPEG")
-                return base64.b64encode(buffer.getvalue()).decode('utf-8')
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", optimize=True, quality=85)
+            size = buffer.tell()
+
+            if size > max_size:
+                quality = 85
+                while size > max_size and quality > 10:
+                    buffer = io.BytesIO()
+                    img.save(buffer, format="JPEG", optimize=True, quality=quality)
+                    size = buffer.tell()
+                    quality -= 5
+            return base64.b64encode(buffer.getvalue()).decode('utf-8')
 
     def generate_response(self, question, image_path):
         image_data = self.encode_image_to_base64(image_path)
