@@ -248,7 +248,42 @@ class QwenVLChatResponseGenerator:
         response, history = self.model.chat(self.tokenizer, query=query, history=None)
         return response
 
+# for Gemini
+import os
+import google.generativeai as genai
+from PIL import Image
+from config_singleton import WandbConfigSingleton
 
+class GeminiResponseGenerator:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.cfg = WandbConfigSingleton.get_instance().config
+        
+        self.model_name = self.cfg.model.pretrained_model_name_or_path
+        
+        self.generation_config = {
+            "temperature": self.cfg.generation.args.temperature,
+            "max_output_tokens": self.cfg.generation.args.max_length,
+        }
+            
+        genai.configure(api_key=self.api_key)
+        self.model = genai.GenerativeModel(self.model_name, generation_config=self.generation_config)
+
+    def generate_response(self, question, image_path):
+        image = Image.open(image_path)
+        message = [question, image]
+        response = self.model.generate_content(message)
+
+        if hasattr(response._result, 'candidates') and response._result.candidates:
+            candidate = response._result.candidates[0]
+            answer = "".join(part.text for part in candidate.content.parts) if candidate.content.parts else "empty response"
+        else:
+            answer = "Blocked by the safety filter."
+
+        return answer
+
+
+# Let's start preparing generator
 def get_adapter():
     instance = WandbConfigSingleton.get_instance()
     cfg = instance.config
@@ -263,6 +298,11 @@ def get_adapter():
             )
             instance = WandbConfigSingleton.get_instance()
             instance.store['generator'] = generator
+            return generator
+
+        elif cfg.api=='gemini':
+            api_key=os.environ["GEMINI_API_KEY"]
+            generator = GeminiResponseGenerator(api_key=api_key)
             return generator
         
     elif cfg.model.pretrained_model_name_or_path in HERON_TYPE1_LIST:
@@ -340,3 +380,5 @@ def get_adapter():
         generator = QwenVLChatResponseGenerator(model, tokenizer, device)
 
         return generator
+
+

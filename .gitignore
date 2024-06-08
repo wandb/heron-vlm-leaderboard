@@ -19,3 +19,10 @@ playground/data/llava-bench-in-the-wild/ja/output/*
 poetry.lock
 
 .env
+
+*jsonl
+*/lib/*
+*/eval/outputs/*
+*/eval/artifacts/*
+*/bin/*
+*.log

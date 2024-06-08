@@ -1,0 +1,39 @@
+wandb:
+ log: True
+ entity: "vision-language-leaderboard"
+ project: "heron-leaderboard"
+ run_name: "Qwen/Qwen-VL-Chat" 
+ launch: false
+
+# basic information
+testmode: false
+torch_dtype: "fp16" # {fp16, bf16, fp32}
+# if you don't use api, please set "api" as "false"
+# if you use api, please select from "openai", "anthoropic", "google", "cohere", "mistral", "amazon_bedrock"
+api: false
+model_artifact: null
+processor_artifact: null
+tokenizer_artifact: null
+
+model:
+ _target_: transformers.AutoModelForCausalLM.from_pretrained
+ pretrained_model_name_or_path: "Qwen/Qwen-VL-Chat"
+ torch_dtype: "float16"
+ ignore_mismatched_sizes: true
+ trust_remote_code: true
+ device_map: "cuda"
+
+tokenizer:
+ _target_: transformers.AutoTokenizer.from_pretrained
+ pretrained_model_name_or_path: "Qwen/Qwen-VL-Chat"
+ trust_remote_code: true
+
+datasets:
+ llava_bench_in_the_wild_artifact_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild:v0'
+ llava_bench_in_the_wild_reference_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild-reference:v0'
+ japanese_heron_bench_artifact_path: 'vision-language-leaderboard/heron-leaderboard/japanese-heron-bench:v0'
+ japanese_heron_bench_reference_path: 'vision-language-leaderboard/heron-leaderboard/heron-bench-reference:v0'
+
+generation:
+ args:
+   max_length: 256

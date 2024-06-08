@@ -27,4 +27,6 @@ pre-commit
 hydra-core
 tenacity
 transformers_stream_generator
-torchvision
+torchvision==0.17.1
+tiktoken==0.7.0
+google-generativeai==0.6.0
