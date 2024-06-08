@@ -32,6 +32,16 @@ JAPANESE_STABLEVLM_LIST = [
 QWEN_VL_LIST = [
     'Qwen/Qwen-VL-Chat',
 ]
+LLAVA_LIST = [
+    'liuhaotian/llava-v1.6-vicuna-7b',
+    'liuhaotian/llava-v1.6-vicuna-13b',
+    'liuhaotian/llava-v1.6-mistral-7b',
+    'liuhaotian/llava-v1.6-34b',
+    'liuhaotian/llava-v1.5-7b',
+    'liuhaotian/llava-v1.5-13b',
+    'liuhaotian/llava-v1.5-7b-lora',
+    'liuhaotian/llava-v1.5-13b-lora',
+]
 
 def load_processor(cfg):
     if cfg.tokenizer is None:
@@ -283,6 +293,149 @@ class GeminiResponseGenerator:
         return answer
 
 
+# for LLaVA
+import os
+import torch
+import re
+from PIL import Image
+from config_singleton import WandbConfigSingleton
+from llava.constants import (
+    IMAGE_TOKEN_INDEX,
+    DEFAULT_IMAGE_TOKEN,
+    DEFAULT_IM_START_TOKEN,
+    DEFAULT_IM_END_TOKEN,
+    IMAGE_PLACEHOLDER,
+)
+from llava.conversation import conv_templates, SeparatorStyle
+from llava.model.builder import load_pretrained_model
+from llava.mm_utils import (
+    process_images,
+    tokenizer_image_token,
+    get_model_name_from_path,
+)
+
+class LLaVAResponseGenerator:
+    def __init__(self, model_path, device):
+        self.cfg = WandbConfigSingleton.get_instance().config
+        
+        self.model_path = model_path
+        self.model_name = get_model_name_from_path(model_path)
+        
+        self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(
+            self.model_path, None, self.model_name
+        )
+        
+        self.device = device
+        self.model.eval()
+        self.model.to(self.device)
+
+    def generate_response(self, question, image_path):
+        image = Image.open(image_path)
+        
+        # prepare inputs
+        qs = question
+        image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
+        if IMAGE_PLACEHOLDER in qs:
+            if self.model.config.mm_use_im_start_end:
+                qs = re.sub(IMAGE_PLACEHOLDER, image_token_se, qs)
+            else:
+                qs = re.sub(IMAGE_PLACEHOLDER, DEFAULT_IMAGE_TOKEN, qs)
+        else:
+            if self.model.config.mm_use_im_start_end:
+                qs = image_token_se + "\n" + qs
+            else:
+                qs = DEFAULT_IMAGE_TOKEN + "\n" + qs
+        
+        conv = conv_templates["vicuna_v1"].copy()
+        conv.append_message(conv.roles[0], qs)
+        conv.append_message(conv.roles[1], None)
+        prompt = conv.get_prompt()
+        
+        images = [image]
+        
+        image_sizes = [x.size for x in images]
+        images_tensor = process_images(
+            images,
+            self.image_processor,
+            self.model.config
+        ).to(self.model.device, dtype=torch.float16)
+        
+        input_ids = (
+            tokenizer_image_token(prompt, self.tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt")
+            .unsqueeze(0)
+            .cuda()
+        )
+        
+        with torch.inference_mode():
+            output_ids = self.model.generate(
+                input_ids,
+                images=images_tensor,
+                image_sizes=image_sizes,
+                max_new_tokens=self.cfg.generation.args.max_length,
+                do_sample=self.cfg.generation.args.do_sample,
+                temperature=self.cfg.generation.args.temperature,
+                use_cache=True,
+                no_repeat_ngram_size=self.cfg.generation.args.no_repeat_ngram_size,
+            )
+        res = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        return res[0]
+
+
+# for Claude-3
+import os
+import io
+import base64
+from PIL import Image
+from anthropic import Anthropic
+from config_singleton import WandbConfigSingleton
+
+class ClaudeResponseGenerator:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.cfg = WandbConfigSingleton.get_instance().config
+        
+        self.model_name = self.cfg.model.pretrained_model_name_or_path
+        self.client = Anthropic(api_key=self.api_key)
+
+    def encode_image_to_base64(self, filepath):
+        with Image.open(filepath) as img:
+            if img.mode == 'RGBA':
+                img = img.convert('RGB')
+            with io.BytesIO() as buffer:
+                img.save(buffer, format="JPEG")
+                return base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+    def generate_response(self, question, image_path):
+        image_data = self.encode_image_to_base64(image_path)
+        
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": question},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": image_data,
+                        },
+                    },
+                ],
+            },
+        ]
+
+        response = self.client.messages.create(
+            max_tokens=self.cfg.generation.args.max_length,
+            messages=messages,
+            temperature=self.cfg.generation.args.temperature,
+            model=self.model_name,
+        )
+
+        decoded_text = response.content[0].text
+        return decoded_text
+
+
 # Let's start preparing generator
 def get_adapter():
     instance = WandbConfigSingleton.get_instance()
@@ -303,6 +456,11 @@ def get_adapter():
         elif cfg.api=='gemini':
             api_key=os.environ["GEMINI_API_KEY"]
             generator = GeminiResponseGenerator(api_key=api_key)
+            return generator
+
+        elif cfg.api=='anthropic':
+            api_key=os.environ["ANTHROPIC_API_KEY"]
+            generator = ClaudeResponseGenerator(api_key=api_key)
             return generator
         
     elif cfg.model.pretrained_model_name_or_path in HERON_TYPE1_LIST:
@@ -380,5 +538,13 @@ def get_adapter():
         generator = QwenVLChatResponseGenerator(model, tokenizer, device)
 
         return generator
+
+    elif cfg.model.pretrained_model_name_or_path in LLAVA_LIST:
+        device_id = 0
+        device = f"cuda:{device_id}"
+        generator = LLaVAResponseGenerator(cfg.model.pretrained_model_name_or_path, device)
+
+        return generator
+
 
 
