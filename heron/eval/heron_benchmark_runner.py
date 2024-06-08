@@ -5,7 +5,7 @@ import re
 import json
 from tqdm import tqdm
 from tenacity import retry, stop_after_attempt, wait_fixed
-from common import encode_image, OpenAIResponseGenerator
+from vandl_adapter import encode_image, OpenAIResponseGenerator
 
 def load_questions(path):
     """

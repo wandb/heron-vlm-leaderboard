@@ -26,3 +26,5 @@ japanize-matplotlib
 pre-commit
 hydra-core
 tenacity
+transformers_stream_generator
+torchvision
