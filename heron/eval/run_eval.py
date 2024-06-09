@@ -1,33 +1,17 @@
 import sys
 sys.path.append(".")
 import ast
+import os
 import hydra
 from omegaconf import DictConfig, OmegaConf
-from heron.models.video_blip import VideoBlipForConditionalGeneration, VideoBlipProcessor
-from heron.models.git_llm.git_japanese_stablelm_alpha import GitJapaneseStableLMAlphaForCausalLM
-from transformers import LlamaTokenizer, AutoTokenizer, AutoProcessor
-import torch
 import wandb
 import pandas as pd
 from config_singleton import WandbConfigSingleton
 #from cleanup import cleanup_gpu
 
-import json
-import os
-import requests
-from PIL import Image
-
-import fire
-
-import yaml
-from tqdm import tqdm
-
-from heron.models.prepare_processors import get_processor
-from heron.models.utils import load_model, load_pretrained_weight
-
-from common import load_questions, LLMResponseGenerator, OpenAIResponseGenerator
 from llava_evaluation import llava_bench_itw_eval
 from heron_evaluation import heron_eval
+from vandl_adapter import get_adapter
 
 def load_processor(cfg):
     if cfg.tokenizer is None:
@@ -50,6 +34,8 @@ def load_processor(cfg):
 
 @hydra.main(config_path="configs", config_name="config", version_base="1.3.2")
 def main(cfg: DictConfig):
+    from huggingface_hub import login
+    login(token=os.environ["HF_TOKEN"])
     print(OmegaConf.to_yaml(cfg))  # Show configurations
 
     # WandB settings
@@ -74,42 +60,8 @@ def main(cfg: DictConfig):
     WandbConfigSingleton.initialize(run, wandb_store)
     cfg = WandbConfigSingleton.get_instance().config
 
-    if cfg.api:
-        if cfg.api=="openai":
-            generator = OpenAIResponseGenerator(
-                api_key=os.getenv('OPENAI_API_KEY'),
-                model_name=cfg.model.pretrained_model_name_or_path,
-                max_tokens=cfg.generation.args.max_length,
-                temperature=cfg.generation.args.temperature,
-            )
-            instance = WandbConfigSingleton.get_instance()
-            instance.store['generator'] = generator
-    else:
-        device_id = 0
-        device = f"cuda:{device_id}"
-
-        # Model settings
-        if cfg.torch_dtype == "bf16":
-            torch_dtype: torch.dtype = torch.bfloat16
-        elif cfg.torch_dtype == "fp16":
-            torch_dtype = torch.float16
-        elif cfg.torch_dtype == "fp32":
-            torch_dtype = torch.float32
-        else:
-            raise ValueError("torch_dtype must be bf16 or fp16. Other types are not supported.")
-        model = hydra.utils.call(cfg.model, torch_dtype=torch_dtype, _recursive_=False)
-        model = model.half()
-        model.eval()
-        model.to(device)
-        print("Model loaded")
-
-        # Processor settings
-        processor = load_processor(cfg)
-        print("Processor loaded")
-        generator = LLMResponseGenerator(model, processor, device)
-
-        instance = WandbConfigSingleton.get_instance()
-        instance.store['generator'] = generator
+    instance = WandbConfigSingleton.get_instance()
+    instance.store['generator'] = get_adapter()
     
     # llava-bench
     llava_bench_itw_eval()

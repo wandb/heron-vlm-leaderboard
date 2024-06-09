@@ -26,3 +26,9 @@ japanize-matplotlib
 pre-commit
 hydra-core
 tenacity
+transformers_stream_generator
+torchvision==0.17.1
+tiktoken==0.7.0
+google-generativeai==0.6.0
+#llava @ git+https://github.com/haotian-liu/LLaVA@main
+anthropic==0.28.0

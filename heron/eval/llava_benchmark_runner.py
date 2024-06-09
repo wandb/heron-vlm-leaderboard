@@ -5,7 +5,9 @@ import re
 import json
 from tqdm import tqdm
 from tenacity import retry, stop_after_attempt, wait_fixed
-from common import encode_image, OpenAIResponseGenerator
+from vandl_adapter import encode_image, OpenAIResponseGenerator
+import asyncio
+import aiohttp
 
 def load_questions(path):
     """
@@ -15,14 +17,10 @@ def load_questions(path):
         return [json.loads(line) for line in file]
         
 # To Do
+from concurrent.futures import ThreadPoolExecutor
+
 def get_evaluations(img_root, results, contexts, references, verbose=True):
-    """
-    Processes a list of questions, generating score for each.
-    """
-    scores = []
-    judgements = []
-    for q, r in tqdm(zip(results, references)):
-        #base64_image = encode_image(os.path.join(img_root, f"{q['image']}"))
+    def process_question(index, q, r):
         image_path = os.path.join(img_root, f"{q['image']}")
         question = q["jp"]
         answer = q["answer"]
@@ -45,25 +43,36 @@ def get_evaluations(img_root, results, contexts, references, verbose=True):
         {answer}
         [The End of Assistant's Answer]
         """
+
         generator = OpenAIResponseGenerator(
             api_key=os.getenv('OPENAI_API_KEY'),
         )
-
         result = generator.generate_response(prompt, image_path)
-        print(result)
         match = re.search(r": \[\[(\d+)\]\]", result)
         if match:
             score = int(match.group(1))
-            scores.append(score)
-            judgements.append(result)
         else:
-            scores.append(-1)
-            judgements.append(result)
+            score = -1
+        return index, score, result, prompt, answer, q
 
-        if verbose:
-            print(
-                f"### ID: {q['question_id']}\n## prompt: {prompt}\n## evaluation: {result}\n"
-            )
-        q["answer"] = answer
-        results.append(q)
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(process_question, i, q, r) for i, (q, r) in enumerate(zip(results, references))]
+        
+        scores = [None] * len(results)
+        judgements = [None] * len(results)
+        prompts = [None] * len(results)
+        answers = [None] * len(results)
+        for future in futures:
+            index, score, result, prompt, answer, q = future.result()
+            scores[index] = score
+            judgements[index] = result
+            prompts[index] = prompt
+            answers[index] = answer
+            if verbose:
+                print(
+                    f"### ID: {q['question_id']}\n## prompt: {prompts[index]}\n## evaluation: {result}\n"
+                )
+            q["answer"] = answers[index]
+            results[index] = q
+
     return scores, judgements
