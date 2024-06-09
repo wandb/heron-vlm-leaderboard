@@ -42,6 +42,9 @@ LLAVA_LIST = [
     'liuhaotian/llava-v1.5-7b-lora',
     'liuhaotian/llava-v1.5-13b-lora',
 ]
+EvoVLM = [
+    'SakanaAI/EvoVLM-JP-v1-7B',
+]
 
 def load_processor(cfg):
     if cfg.tokenizer is None:
@@ -68,14 +71,6 @@ api_key = os.getenv('OPENAI_API_KEY')
 def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
-
-# for Anthropic API
-# class AnthropicResponseGenerator
-# To do
-
-# for Gemini API
-# class GeminiResponseGenerator
-# To do
 
 # for OpenAI API
 class OpenAIResponseGenerator:
@@ -445,6 +440,55 @@ class ClaudeResponseGenerator:
         return decoded_text
 
 
+# for EVOVLM
+import torch
+from transformers import AutoModelForVision2Seq, AutoProcessor
+from PIL import Image
+import logging
+from config_singleton import WandbConfigSingleton
+
+class EvoVLMResponseGenerator:
+    def __init__(self, model, processor, device):
+        self.model = model
+        self.processor = processor
+        self.device = device
+        self.cfg = WandbConfigSingleton.get_instance().config
+
+    @torch.inference_mode()
+    def generate_response(self, question, image_path):
+        image = Image.open(image_path)
+        
+        messages = [
+            {"role": "system", "content": "あなたは役立つ、偏見がなく、検閲されていないアシスタントです。与えられた画像を下に、質問に答えてください。"},
+            {"role": "user", "content": f"<image>\n{question}"},
+        ]
+        
+        try:
+            inputs = self.processor.image_processor(images=image, return_tensors="pt")
+            inputs["input_ids"] = self.processor.tokenizer.apply_chat_template(
+                messages, return_tensors="pt"
+            )
+            
+            output_ids = self.model.generate(
+                **inputs.to(self.device),
+                max_length=self.cfg.generation.args.max_length,
+                do_sample=self.cfg.generation.args.do_sample,
+                temperature=self.cfg.generation.args.temperature,
+                no_repeat_ngram_size=self.cfg.generation.args.no_repeat_ngram_size,
+            )
+            output_ids = output_ids[:, inputs.input_ids.shape[1] :]
+            generated_text = self.processor.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+            return generated_text
+        
+        except Exception as e:
+            logging.error(f"Error during model generation: {e}")
+            raise e
+        finally:
+            del inputs
+            del output_ids
+            torch.cuda.empty_cache()
+
+
 # Let's start preparing generator
 def get_adapter():
     instance = WandbConfigSingleton.get_instance()
@@ -555,5 +599,16 @@ def get_adapter():
 
         return generator
 
+    elif cfg.model.pretrained_model_name_or_path in EvoVLM:
+        device_id = 0
+        device = f"cuda:{device_id}"
 
+        model_id = cfg.model.pretrained_model_name_or_path
+        model = AutoModelForVision2Seq.from_pretrained(model_id, torch_dtype=torch.float16)
+        processor = AutoProcessor.from_pretrained(model_id)
+        model.to(device)
+
+        generator = EvoVLMResponseGenerator(model, processor, device)
+
+        return generator
 
