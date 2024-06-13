@@ -1,5 +1,5 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
-torch==2.2.0+cu121
+torch==2.1.0
 
 PyYAML
 accelerate
@@ -27,8 +27,8 @@ pre-commit
 hydra-core
 tenacity
 transformers_stream_generator
-torchvision==0.17.1
+torchvision==0.16.0
 tiktoken==0.7.0
 google-generativeai==0.6.0
-#llava @ git+https://github.com/haotian-liu/LLaVA@main
+#llava @ git+https://github.com/haotian-liu/LLaVA@main # if you want to use llava
 anthropic==0.28.0

@@ -45,6 +45,9 @@ LLAVA_LIST = [
 EvoVLM = [
     'SakanaAI/EvoVLM-JP-v1-7B',
 ]
+LLaVACALM2 = [
+    'cyberagent/llava-calm2-siglip',
+]
 
 def load_processor(cfg):
     if cfg.tokenizer is None:
@@ -294,27 +297,29 @@ import torch
 import re
 from PIL import Image
 from config_singleton import WandbConfigSingleton
-from llava.constants import (
-    IMAGE_TOKEN_INDEX,
-    DEFAULT_IMAGE_TOKEN,
-    DEFAULT_IM_START_TOKEN,
-    DEFAULT_IM_END_TOKEN,
-    IMAGE_PLACEHOLDER,
-)
-from llava.conversation import conv_templates, SeparatorStyle
-from llava.model.builder import load_pretrained_model
-from llava.mm_utils import (
-    process_images,
-    tokenizer_image_token,
-    get_model_name_from_path,
-)
 
+# for LLaVA
 class LLaVAResponseGenerator:
     def __init__(self, model_path, device):
         self.cfg = WandbConfigSingleton.get_instance().config
         
         self.model_path = model_path
         self.model_name = get_model_name_from_path(model_path)
+        
+        from llava.constants import (
+            IMAGE_TOKEN_INDEX,
+            DEFAULT_IMAGE_TOKEN,
+            DEFAULT_IM_START_TOKEN,
+            DEFAULT_IM_END_TOKEN,
+            IMAGE_PLACEHOLDER,
+        )
+        from llava.conversation import conv_templates, SeparatorStyle
+        from llava.model.builder import load_pretrained_model
+        from llava.mm_utils import (
+            process_images,
+            tokenizer_image_token,
+            get_model_name_from_path,
+        )
         
         self.tokenizer, self.model, self.image_processor, self.context_len = load_pretrained_model(
             self.model_path, None, self.model_name
@@ -489,6 +494,52 @@ class EvoVLMResponseGenerator:
             torch.cuda.empty_cache()
 
 
+# for llava-calm2-siglip
+import torch
+from transformers import AutoProcessor, LlavaForConditionalGeneration
+from PIL import Image
+import logging
+from config_singleton import WandbConfigSingleton
+
+class LLaVACALM2ResponseGenerator:
+    def __init__(self, model, processor, device):
+        self.model = model
+        self.processor = processor
+        self.device = device
+        self.cfg = WandbConfigSingleton.get_instance().config
+
+    @torch.inference_mode()
+    def generate_response(self, question, image_path):
+        image = Image.open(image_path)
+        
+        prompt = f"""USER: <image>
+{question}
+ASSISTANT: """
+        
+        try:
+            inputs = self.processor(text=prompt, images=image, return_tensors="pt").to(self.device, torch.bfloat16)
+            
+            generate_ids = self.model.generate(
+                **inputs,
+                max_length=self.cfg.generation.args.max_length,
+                do_sample=self.cfg.generation.args.do_sample,
+                temperature=self.cfg.generation.args.temperature,
+                no_repeat_ngram_size=self.cfg.generation.args.no_repeat_ngram_size,
+            )
+            
+            output = self.processor.tokenizer.decode(generate_ids[0][:-1], clean_up_tokenization_spaces=False)
+            response = output.split("ASSISTANT: ")[1]
+            return response
+        
+        except Exception as e:
+            logging.error(f"Error during model generation: {e}")
+            raise e
+        finally:
+            del inputs
+            del generate_ids
+            torch.cuda.empty_cache()
+
+
 # Let's start preparing generator
 def get_adapter():
     instance = WandbConfigSingleton.get_instance()
@@ -612,3 +663,17 @@ def get_adapter():
 
         return generator
 
+    elif cfg.model.pretrained_model_name_or_path in LLaVACALM2:
+        device_id = 0
+        device = f"cuda:{device_id}"
+
+        model = LlavaForConditionalGeneration.from_pretrained(
+            cfg.model.pretrained_model_name_or_path,
+            torch_dtype=torch.bfloat16,
+        ).to(device)
+
+        processor = AutoProcessor.from_pretrained(cfg.model.pretrained_model_name_or_path)
+
+        generator = LLaVACALM2ResponseGenerator(model, processor, device)
+
+        return generator
