@@ -540,6 +540,59 @@ ASSISTANT: """
             torch.cuda.empty_cache()
 
 
+# for microsoft/Phi-3-vision-128k-instruct
+import torch
+from transformers import AutoModelForCausalLM, AutoProcessor
+from PIL import Image
+import logging
+from config_singleton import WandbConfigSingleton
+
+class Phi3Vision128KInstructResponseGenerator:
+    def __init__(self, model, processor, device):
+        self.model = model
+        self.processor = processor
+        self.device = device
+        self.cfg = WandbConfigSingleton.get_instance().config
+
+    @torch.inference_mode()
+    def generate_response(self, question, image_path):
+        image = Image.open(image_path)
+        
+        messages = [
+            {"role": "user", "content": f"<|image_1|>\n{question}"},
+        ]
+        
+        try:
+            prompt = self.processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            inputs = self.processor(prompt, [image], return_tensors="pt").to(self.device)
+            
+            generation_args = {
+                "max_new_tokens": self.cfg.generation.args.max_length,
+                "temperature": self.cfg.generation.args.temperature,
+                "do_sample": self.cfg.generation.args.do_sample,
+            }
+            
+            generate_ids = self.model.generate(
+                **inputs,
+                eos_token_id=self.processor.tokenizer.eos_token_id, 
+                no_repeat_ngram_size=self.cfg.generation.args.no_repeat_ngram_size,
+                **generation_args
+            )
+            
+            generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
+            response = self.processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0] 
+
+            return response
+        
+        except Exception as e:
+            logging.error(f"Error during model generation: {e}")
+            raise e
+        finally:
+            del inputs
+            del generate_ids
+            torch.cuda.empty_cache()
+
+
 # Let's start preparing generator
 def get_adapter():
     instance = WandbConfigSingleton.get_instance()
@@ -675,5 +728,22 @@ def get_adapter():
         processor = AutoProcessor.from_pretrained(cfg.model.pretrained_model_name_or_path)
 
         generator = LLaVACALM2ResponseGenerator(model, processor, device)
+
+        return generator
+
+    elif cfg.model.pretrained_model_name_or_path == 'microsoft/Phi-3-vision-128k-instruct':
+        device_id = 0
+        device = f"cuda:{device_id}"
+
+        model = AutoModelForCausalLM.from_pretrained(
+            cfg.model.pretrained_model_name_or_path, 
+            device_map="cuda", 
+            trust_remote_code=True, 
+            torch_dtype="auto", 
+            _attn_implementation='flash_attention_2',
+        )
+        processor = AutoProcessor.from_pretrained(cfg.model.pretrained_model_name_or_path, trust_remote_code=True)
+
+        generator = Phi3Vision128KInstructResponseGenerator(model, processor, device)
 
         return generator

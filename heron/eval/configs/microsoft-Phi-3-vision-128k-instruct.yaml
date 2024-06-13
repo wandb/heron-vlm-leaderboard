@@ -1,25 +1,28 @@
 wandb:
  log: true
  entity: "vision-language-leaderboard"
- project: "heron-leaderboard"
- run_name: "cyberagent/llava-calm2-siglip"
+ project: "heron-leaderboard" 
+ run_name: "microsoft/Phi-3-vision-128k-instruct"
  launch: false
 
 testmode: false
-torch_dtype: "bf16"
+torch_dtype: "auto"
 api: false
 model_artifact: null
-processor_artifact: null
+processor_artifact: null 
 tokenizer_artifact: null
 
 model:
- _target_: transformers.LlavaForConditionalGeneration.from_pretrained
- pretrained_model_name_or_path: "cyberagent/llava-calm2-siglip"
- torch_dtype: "bfloat16"
+ _target_: transformers.AutoModelForCausalLM.from_pretrained
+ pretrained_model_name_or_path: "microsoft/Phi-3-vision-128k-instruct"
+ device_map: "cuda"
+ trust_remote_code: true
+ _attn_implementation: "flash_attention_2" 
 
 processor:
  _target_: transformers.AutoProcessor.from_pretrained
- pretrained_model_name_or_path: "cyberagent/llava-calm2-siglip"
+ pretrained_model_name_or_path: "microsoft/Phi-3-vision-128k-instruct"
+ trust_remote_code: true
 
 tokenizer: null
 
@@ -31,7 +34,7 @@ datasets:
 
 generation:
  args:
-   max_length: 500
-   do_sample: true
-   temperature: 0.2
+   max_length: 256
+   do_sample: false
+   temperature: 0.0
    no_repeat_ngram_size: 2
