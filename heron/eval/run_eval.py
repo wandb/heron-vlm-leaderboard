@@ -7,11 +7,10 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 import pandas as pd
 from config_singleton import WandbConfigSingleton
-#from cleanup import cleanup_gpu
 
 from llava_evaluation import llava_bench_itw_eval
 from heron_evaluation import heron_eval
-from vandl_adapter import get_adapter
+from vandl_adapter import get_adapter, generate_automatic_adapter
 
 def load_processor(cfg):
     if cfg.tokenizer is None:
@@ -61,6 +60,11 @@ def main(cfg: DictConfig):
     cfg = WandbConfigSingleton.get_instance().config
 
     instance = WandbConfigSingleton.get_instance()
+    
+    # Generate automatic adapter if specified
+    if cfg.model.automatic_adapter_generation:
+        generate_automatic_adapter(cfg.model.pretrained_model_name_or_path, cfg.model.api_type)
+
     instance.store['generator'] = get_adapter()
     
     # llava-bench

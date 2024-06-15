@@ -2,6 +2,7 @@ import base64
 import requests
 import os
 import logging
+import importlib
 import torch
 import ast
 import hydra
@@ -19,6 +20,7 @@ from datasets import load_dataset
 
 import requests
 from PIL import Image
+import wandb
 
 HERON_TYPE1_LIST = [
     "turing-motors/heron-chat-git-ja-stablelm-base-7b-v1",
@@ -593,10 +595,153 @@ class Phi3Vision128KInstructResponseGenerator:
             torch.cuda.empty_cache()
 
 
+# for automatic adapter generation
+import os
+from huggingface_hub import hf_hub_download
+import ast
+import openai
+import anthropic
+from openai import OpenAI
+
+def generate_automatic_adapter(model_id, api_type):
+    instance = WandbConfigSingleton.get_instance()
+    run = instance.run
+    cfg = instance.config
+    
+    # Download the model's README.md from Hugging Face
+    readme_path = hf_hub_download(repo_id=model_id, filename="README.md")
+
+    with open(readme_path, "r") as f:
+        readme_content = f.read()
+
+    # Read the content of vandl_adapter.py and run_eval.py
+    with open("vandl_adapter.py", "r") as f:
+        vandl_adapter_content = f.read()
+
+    with open("run_eval.py", "r") as f:
+        run_eval_content = f.read()
+
+    # Construct the prompt for GPT-4 or Claude-3-Opus
+    prompt = f"""
+    Given the following README.md content for the model {model_id}:
+
+    {readme_content}
+
+    And the content of vandl_adapter.py:
+
+    {vandl_adapter_content}
+
+    And the content of run_eval.py:
+
+    {run_eval_content}
+
+    Please generate a Python code snippet for an adapter class that can be used to run the model for the Vision and Language Leaderboard benchmark. The adapter should follow the structure of the existing adapters in vandl_adapter.py and should be compatible with the run_eval.py script. Note that ResponseGenerator can take only self as only one arg. So load model, processor or tokenizer in the class. Please ensure that the output begins with the identifier '# GENERATED_ADAPTER_CODE' on a new line, followed by the generated Python code. Do not include any additional content such as explanations or descriptions.
+    """
+
+    # Call GPT-4 or Claude-3-Opus API with the prompt
+    generated_adapter = call_gpt4_or_claude_api(prompt, api_type)
+
+    # Split the generated code using the identifier and take the second part (the actual code)
+    generated_adapter_code = generated_adapter.split("# GENERATED_ADAPTER_CODE\n")[1]
+
+    # Write the generated adapter to a new Python file
+    module_name = f"adapter_{model_id.replace('/', '_').replace('.', '_').replace('-', '_')}"
+    with open(f"{module_name}.py", "w") as f:
+        f.write(generated_adapter_code)
+
+    # Display the generated code before asking for user confirmation
+    print("Generated code:")
+    print(generated_adapter_code)
+
+    # Ask the user for confirmation before executing the generated code
+    if cfg.model.skip_approval==False:
+        approval = input("Are you sure you want to execute the generated code? (y/n): ")
+        if approval.lower() != 'y':
+            print("Execution of the code has been denied by the user.")
+            sys.exit("Execution of the code has been stopped by the user.")
+
+    artifact = wandb.Artifact('generated_adapter', type='adapter')
+    artifact.add_file(f"{module_name}.py")
+    run.log_artifact(artifact)
+
+    # Import the generated adapter dynamically
+    adapter_module = importlib.import_module(module_name)
+    
+    # Find the adapter class name in the generated code
+    class_name_match = re.search(r'\b(\w*ResponseGenerator)\b', generated_adapter_code)
+
+    if class_name_match.group(1):
+        class_name = class_name_match.group(1)
+    else:
+        raise ValueError(f"Could not find the adapter class name in the generated code for model {model_id}. Please make sure the class name ends with 'ResponseGenerator'.")
+
+    adapter_class = getattr(adapter_module, class_name)
+    cfg.model.class_name = class_name
+
+    return adapter_class
+
+# for automatic adapter generation
+def call_gpt4_or_claude_api(prompt, api_type):
+    if api_type == 'gpt-4':
+        if os.getenv("OPENAI_API_KEY"):
+            openai.api_key = os.getenv("OPENAI_API_KEY")
+            client = OpenAI()
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that generates code based on given requirements."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=4096,
+                n=1,
+                stop=None,
+                temperature=0.7,
+            )
+            return response.choices[0].message['content']
+        else:
+            raise ValueError("OpenAI API key is not available.")
+
+    elif api_type == 'claude-3-opus':
+        if os.getenv("ANTHROPIC_API_KEY"):
+            client = anthropic.Client()
+            response = client.messages.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model="claude-3-opus-20240229",
+                max_tokens=4096,
+                temperature=0.7,
+            )
+            return response.content[0].text.strip()
+        else:
+            raise ValueError("Anthropic API key is not available.")
+
+    else:
+        raise ValueError(f"Unsupported API type: {api_type}")
+    
+
 # Let's start preparing generator
 def get_adapter():
     instance = WandbConfigSingleton.get_instance()
     cfg = instance.config
+
+    if cfg.model.automatic_adapter_generation:
+        model_id = cfg.model.pretrained_model_name_or_path
+        module_name = f"adapter_{model_id.replace('/', '_').replace('.', '_').replace('-', '_')}"
+        class_name = cfg.model.class_name
+        
+        try:
+            adapter_module = importlib.import_module(module_name)
+            adapter_class = getattr(adapter_module, class_name)
+            device_id = 0
+            device = f"cuda:{device_id}"
+            generator = adapter_class(device)
+            return generator
+        except (ImportError, AttributeError):
+            raise ImportError(f"Could not import the generated adapter for model {model_id}. Please check the logs for any errors during adapter generation.")
 
     if cfg.api:
         if cfg.api=="openai":

@@ -1,8 +1,8 @@
 wandb:
   log: True
-  entity: "your-entity-name"
-  project: "your-project-name"
-  run_name: "your-model-name" 
+  entity: "vision-language-leaderboard"
+  project: "heron-leaderboard"
+  run_name: "microsoft/Phi-3-vision-128k-instruct" 
   launch: false
 
 # basic information
@@ -15,20 +15,20 @@ tokenizer_artifact: null
 
 model:
   _target_: null
-  pretrained_model_name_or_path:  "your-model-name"
-  automatic_adapter_generation: false # this is experimental. if true, the model adapter will be automatically generated based on the downloaded README.md.
-  api_type: null # for automatic_adapter_generation, 'gpt-4' or 'claude-3-opus'
+  pretrained_model_name_or_path:  "microsoft/Phi-3-vision-128k-instruct"
+  automatic_adapter_generation: true # this is experimental. if true, the model adapter will be automatically generated based on the downloaded README.md.
+  api_type: "claude-3-opus" # for automatic_adapter_generation, 'gpt-4' or 'claude-3-opus'
   skip_approval: false # if true, the approval process for using generated code will be skipped.
   torch_dtype: "float16"
   ignore_mismatched_sizes: true
 
 processor:
-  _target_: transformers.AutoProcessor.from_pretrained
+  _target_: null
   pretrained_model_name_or_path: "your-model-name"
   
 tokenizer: 
-  _target_: transformers.LlamaTokenizer.from_pretrained
-  pretrained_model_name_or_path: "novelai/nerdstash-tokenizer-v1"
+  _target_: null
+  pretrained_model_name_or_path: null
   args:
     padding_side: "right"
     additional_special_tokens: '["▁▁"]'
