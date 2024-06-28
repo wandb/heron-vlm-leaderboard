@@ -1,0 +1,44 @@
+wandb:
+ log: true
+ entity: "vision-language-leaderboard"
+ project: "heron-leaderboard"
+ run_name: "OpenGVLab/InternVL-Chat-V1-5"
+ launch: false
+
+testmode: false
+torch_dtype: "bf16"
+api: false
+model_artifact: null
+processor_artifact: null
+tokenizer_artifact: null
+
+# 単一GPUを使用するかどうか（デフォルトはfalse）
+use_single_gpu: false
+
+# FlashAttentionの使用を制御（デフォルトはtrue）
+use_flash_attn: false
+
+model:
+ _target_: transformers.AutoModel.from_pretrained
+ pretrained_model_name_or_path: "OpenGVLab/InternVL-Chat-V1-5"
+ torch_dtype: "bfloat16"
+ low_cpu_mem_usage: true
+ trust_remote_code: true
+
+tokenizer:
+ _target_: transformers.AutoTokenizer.from_pretrained
+ pretrained_model_name_or_path: "OpenGVLab/InternVL-Chat-V1-5"
+ trust_remote_code: true
+
+datasets:
+ llava_bench_in_the_wild_artifact_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild:v0'
+ llava_bench_in_the_wild_reference_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild-reference:v0'
+ japanese_heron_bench_artifact_path: 'vision-language-leaderboard/heron-leaderboard/japanese-heron-bench:v0'
+ japanese_heron_bench_reference_path: 'vision-language-leaderboard/heron-leaderboard/heron-bench-reference:v0'
+
+generation:
+ args:
+   max_length: 512
+   do_sample: false
+   temperature: 0.2
+   no_repeat_ngram_size: 2

@@ -593,6 +593,115 @@ class Phi3Vision128KInstructResponseGenerator:
             torch.cuda.empty_cache()
 
 
+# for penGVLab/InternVL-Chat-V1-5
+import torch
+from PIL import Image
+from transformers import AutoTokenizer, AutoModel
+import logging
+from config_singleton import WandbConfigSingleton
+import os
+from transformers import AutoConfig
+
+class InternVLChatResponseGenerator:
+    def __init__(self, model, tokenizer):
+        self.model = model
+        self.tokenizer = tokenizer
+        self.cfg = WandbConfigSingleton.get_instance().config
+
+    def load_image(self, image_path, input_size=448, max_num=6):
+        image = Image.open(image_path).convert('RGB')
+        transform = self.build_transform(input_size=input_size)
+        images = self.dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
+        pixel_values = [transform(image) for image in images]
+        pixel_values = torch.stack(pixel_values)
+        return pixel_values
+
+    def build_transform(self, input_size):
+        from torchvision import transforms as T
+        IMAGENET_MEAN = (0.485, 0.456, 0.406)
+        IMAGENET_STD = (0.229, 0.224, 0.225)
+        transform = T.Compose([
+            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+            T.Resize((input_size, input_size), interpolation=T.InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+        ])
+        return transform
+
+    def dynamic_preprocess(self, image, min_num=1, max_num=6, image_size=448, use_thumbnail=False):
+        orig_width, orig_height = image.size
+        aspect_ratio = orig_width / orig_height
+
+        target_ratios = set(
+            (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
+            i * j <= max_num and i * j >= min_num)
+        target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
+
+        target_aspect_ratio = self.find_closest_aspect_ratio(
+            aspect_ratio, target_ratios, orig_width, orig_height, image_size)
+
+        target_width = image_size * target_aspect_ratio[0]
+        target_height = image_size * target_aspect_ratio[1]
+        blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
+
+        resized_img = image.resize((target_width, target_height))
+        processed_images = []
+        for i in range(blocks):
+            box = (
+                (i % (target_width // image_size)) * image_size,
+                (i // (target_width // image_size)) * image_size,
+                ((i % (target_width // image_size)) + 1) * image_size,
+                ((i // (target_width // image_size)) + 1) * image_size
+            )
+            split_img = resized_img.crop(box)
+            processed_images.append(split_img)
+        
+        if use_thumbnail and len(processed_images) != 1:
+            thumbnail_img = image.resize((image_size, image_size))
+            processed_images.append(thumbnail_img)
+        
+        return processed_images
+
+    def find_closest_aspect_ratio(self, aspect_ratio, target_ratios, width, height, image_size):
+        best_ratio_diff = float('inf')
+        best_ratio = (1, 1)
+        area = width * height
+        for ratio in target_ratios:
+            target_aspect_ratio = ratio[0] / ratio[1]
+            ratio_diff = abs(aspect_ratio - target_aspect_ratio)
+            if ratio_diff < best_ratio_diff:
+                best_ratio_diff = ratio_diff
+                best_ratio = ratio
+            elif ratio_diff == best_ratio_diff:
+                if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
+                    best_ratio = ratio
+        return best_ratio
+
+    @torch.inference_mode()
+    def generate_response(self, question, image_path):
+        try:
+            pixel_values = self.load_image(image_path, max_num=6).to(torch.bfloat16)
+
+            generation_config = dict(
+                num_beams=1,
+                max_new_tokens=self.cfg.generation.args.max_length,
+                do_sample=self.cfg.generation.args.do_sample,
+                temperature=self.cfg.generation.args.temperature,
+                no_repeat_ngram_size=self.cfg.generation.args.no_repeat_ngram_size,
+            )
+
+            response = self.model.chat(self.tokenizer, pixel_values, question, generation_config)
+            return response
+
+        except Exception as e:
+            logging.error(f"Error during model generation: {e}")
+            raise e
+        finally:
+            if 'pixel_values' in locals():
+                del pixel_values
+            torch.cuda.empty_cache()
+
+
 # Let's start preparing generator
 def get_adapter():
     instance = WandbConfigSingleton.get_instance()
@@ -746,4 +855,50 @@ def get_adapter():
 
         generator = Phi3Vision128KInstructResponseGenerator(model, processor, device)
 
+        return generator
+
+    elif cfg.model.pretrained_model_name_or_path == "OpenGVLab/InternVL-Chat-V1-5":
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
+        # FlashAttentionの使用を制御
+        use_flash_attn = cfg.get('use_flash_attn', False)
+        
+        # 単一GPUの使用を制御
+        use_single_gpu = cfg.get('use_single_gpu', False)
+
+        # モデルの設定を取得し、必要に応じて更新
+        config = AutoConfig.from_pretrained(cfg.model.pretrained_model_name_or_path, trust_remote_code=True)
+        
+        # Vision modelのFlashAttention設定
+        config.vision_config.use_flash_attn = use_flash_attn
+        
+        # Language modelのFlashAttention設定
+        if hasattr(config, 'llm_config'):
+            if use_flash_attn:
+                config.llm_config.attn_implementation = "flash_attention_2"
+            else:
+                config.llm_config.attn_implementation = "eager"
+
+        model_args = {
+            "config": config,
+            "torch_dtype": torch.bfloat16,
+            "low_cpu_mem_usage": True,
+            "trust_remote_code": True,
+        }
+
+        if use_single_gpu:
+            model = AutoModel.from_pretrained(
+                cfg.model.pretrained_model_name_or_path,
+                **model_args
+            ).eval().cuda()
+        else:
+            model_args["device_map"] = 'auto'
+            model = AutoModel.from_pretrained(
+                cfg.model.pretrained_model_name_or_path,
+                **model_args
+            ).eval()
+
+        tokenizer = AutoTokenizer.from_pretrained(cfg.model.pretrained_model_name_or_path, trust_remote_code=True)
+
+        generator = InternVLChatResponseGenerator(model, tokenizer)
         return generator
