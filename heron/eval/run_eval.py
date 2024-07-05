@@ -7,11 +7,8 @@ from omegaconf import DictConfig, OmegaConf
 import wandb
 import pandas as pd
 from config_singleton import WandbConfigSingleton
-#from cleanup import cleanup_gpu
-
-from llava_evaluation import llava_bench_itw_eval
-from heron_evaluation import heron_eval
 from vandl_adapter import get_adapter
+from benchmarks.common_evaluation import evaluate_benchmark
 
 def load_processor(cfg):
     if cfg.tokenizer is None:
@@ -30,7 +27,6 @@ def load_processor(cfg):
         processor = hydra.utils.call(cfg.processor, _recursive_=False)
         processor.tokenizer = tokenizer
     return processor
-
 
 @hydra.main(config_path="configs", config_name="config", version_base="1.3.2")
 def main(cfg: DictConfig):
@@ -55,24 +51,23 @@ def main(cfg: DictConfig):
 
     # Initialize the WandbConfigSingleton
     wandb_store = {
-        "generator":None, 
-        "lb_df":pd.DataFrame({"model_name": [cfg.model.pretrained_model_name_or_path]})}
+        "generator": None, 
+        "lb_df": pd.DataFrame({"model_name": [cfg.model.pretrained_model_name_or_path]})
+    }
     WandbConfigSingleton.initialize(run, wandb_store)
     cfg = WandbConfigSingleton.get_instance().config
 
     instance = WandbConfigSingleton.get_instance()
     instance.store['generator'] = get_adapter()
-    
-    # llava-bench
-    llava_bench_itw_eval()
 
-    # heron-bench
-    heron_eval()
+    # Run evaluations for all benchmarks defined in the config
+    for benchmark_name, benchmark_config in cfg.benchmarks.items():
+        evaluate_benchmark(OmegaConf.to_container(benchmark_config, resolve=True))
 
-    # log results
+    # Log final results
     instance = WandbConfigSingleton.get_instance()
     lb_df = instance.store['lb_df']
-    radar_df = lb_df.drop(['model_name', 'ave_llava_itw', 'ave_heron'], axis=1).T.reset_index()
+    radar_df = lb_df.drop(['model_name'] + [f"ave_{name}" for name in cfg.benchmarks.keys()], axis=1).T.reset_index()
     radar_df.columns = ['category', 'score']
     run.log({"lb_table": wandb.Table(dataframe=lb_df), "radar_table": wandb.Table(dataframe=radar_df)})
 
