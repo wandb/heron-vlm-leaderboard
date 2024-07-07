@@ -1,4 +1,3 @@
-# src/plugin_manager.py
 import importlib
 import os
 from typing import Dict, Any
@@ -12,10 +11,13 @@ class PluginManager:
     def load_plugins(self):
         for filename in os.listdir(self.plugin_dir):
             if filename.endswith('_adapter.py'):
-                module_name = f"plugins.{filename[:-3]}"
-                module = importlib.import_module(module_name)
-                if hasattr(module, 'register_plugin'):
-                    module.register_plugin(self)
+                try:
+                    module_name = f"plugins.{filename[:-3]}"
+                    module = importlib.import_module(module_name)
+                    if hasattr(module, 'register_plugin'):
+                        module.register_plugin(self)
+                except  ImportError:
+                    continue
 
     def register_adapter(self, name: str, adapter_class):
         self.plugins[name] = adapter_class
