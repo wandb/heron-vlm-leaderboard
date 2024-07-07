@@ -1,0 +1,18 @@
+llava:
+  name: llava
+  artifact_path: ${datasets.llava_bench_in_the_wild_artifact_path}
+  questions_file: ja/questions_ja.jsonl
+  context_file: ja/context_ja.jsonl
+  reference_path: ${datasets.llava_bench_in_the_wild_reference_path}
+  reference_file: gpt-4-turbo-2024-04-09_answers.jsonl
+  question_key: jp
+  context_key: caption_jp
+  image_key: image
+  table_columns: 
+    - benchmark
+    - question_id
+    - category
+    - image_file
+    - image
+    - question
+    - answer

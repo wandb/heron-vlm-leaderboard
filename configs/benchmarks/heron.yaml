@@ -1,0 +1,19 @@
+heron:
+  name: heron
+  artifact_path: ${datasets.japanese_heron_bench_artifact_path}
+  questions_file: questions_ja.jsonl
+  context_file: context_ja.jsonl
+  reference_path: ${datasets.japanese_heron_bench_reference_path}
+  reference_file: gpt-4-turbo-2024-04-09_answers.jsonl
+  question_key: text
+  context_key: caption
+  image_key: image
+  table_columns: 
+    - benchmark
+    - question_id
+    - category
+    - image_category
+    - image_file
+    - image
+    - question
+    - answer
