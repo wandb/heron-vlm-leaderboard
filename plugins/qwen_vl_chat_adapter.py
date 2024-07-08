@@ -11,7 +11,9 @@ class QwenVLChatAdapter(BaseAdapter):
         'pillow>=8.0.0',
         'einops',
         'transformers_stream_generator>=0.0.4',
-        'torchvision'
+        'torchvision',
+        'tiktoken',
+        'matplotlib',
     ]
 
     def __init__(self, model_name: str, device: str, config: Dict[str, Any]):
