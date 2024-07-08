@@ -17,6 +17,10 @@ setup(
         'anthropic',
         'tenacity',
         'huggingface_hub',
+        'tiktoken',
+        'matplotlib',
+        'torchvision',
+        'transformers_stream_generator',
     ],
     entry_points={
         'console_scripts': [
