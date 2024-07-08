@@ -10,3 +10,7 @@ openai
 anthropic
 tenacity
 huggingface_hub
+accelerate
+einops
+transformers_stream_generator
+torchvision

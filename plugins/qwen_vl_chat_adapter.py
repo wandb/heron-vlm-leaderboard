@@ -9,6 +9,9 @@ class QwenVLChatAdapter(BaseAdapter):
         'torch>=1.9.0',
         'transformers>=4.20.0',
         'pillow>=8.0.0',
+        'einops',
+        'transformers_stream_generator>=0.0.4',
+        'torchvision'
     ]
 
     def __init__(self, model_name: str, device: str, config: Dict[str, Any]):
