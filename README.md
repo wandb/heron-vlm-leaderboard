@@ -1,4 +1,4 @@
-![Header Image](a0570971.png)
+![Header Image](header.png)
 
 # Heron Vision Language Leaderboard
 
