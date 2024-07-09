@@ -12,18 +12,12 @@ wandb
 
 *egg-info
 
-playground/data/llava-bench-ja/val2014/*
-playground/data/llava-bench-in-the-wild/images/*
-playground/data/llava-bench-in-the-wild/ja/output/*
-
 poetry.lock
 
 .env
 
 *jsonl
 */lib/*
-*/eval/outputs/*
-*/eval/artifacts/*
 */bin/*
 *.log
 
