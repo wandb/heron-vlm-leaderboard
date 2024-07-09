@@ -1,3 +1,5 @@
+![Header Image](a0570971.png)
+
 # Heron Vision Language Leaderboard
 
 ## Overview
