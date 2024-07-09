@@ -1,6 +1,0 @@
-dataset_type: llava_instruct
-dataset_root: ./
-jsonl_path:
-language: "en"
-n_train: 157000
-n_val: 712

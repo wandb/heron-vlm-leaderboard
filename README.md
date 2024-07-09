@@ -1,265 +1,65 @@
-<div align="center">
+# Heron Vision Language Leaderboard
 
-# Heron
-**A Library for Vision / Video and Language models**
+## Overview
 
-English | [日本語](./docs/README_JP.md) | [中文](./docs/README_CN.md)
-</div>
+This project is a benchmarking tool for evaluating and comparing the performance of various Vision Language Models (VLMs). It uses two datasets: LLaVA-Bench-In-the-Wild and Japanese HERON Bench to measure model performance.
 
+## Key Features
 
-Welcome to "heron" repository. Heron is a library that seamlessly integrates multiple Vision and Language models, as well as Video and Language models. One of its standout features is its support for Japanese V&L models. Additionally, we provide pretrained weights trained on various datasets.
+- Benchmark evaluation for multiple VLMs
+- Logging and visualization using Weights & Biases
+- Flexible configuration options (using Hydra configuration system)
 
-Demo is available from here: [[Demo](https://heron-demo.turing-motors.com/)]
+## Installation
 
-<div align="center">
-<img src="./images/heron_image.png" width="50%">
-</div>
+1. Clone the repository:
+   ```
+   git clone https://github.com/wandb/heron-vlm-leaderboard.git
+   cd heron-vlm-leaderboard
+   ```
 
+2. Install the project:
+   ```
+   pip install -e .
+   pip install -r requirements.txt
+   ```
+   This will install the project and its dependencies listed in `setup.py` and `requirements.txt`.
 
-Heron allows you to configure your own V&L models combining various modules. Vision Encoder, Adopter, and LLM can be configured in the configuration file. The distributed learning method and datasets used for training can also be easily configured.
+3. Install additional dependencies for your chosen model:
+   Depending on the model you want to use, you may need to install additional libraries. Refer to the model's documentation for specific requirements.
 
-<img src="./images/build_train_model.png" width="100%">
+## Usage
 
-# Installation
-## 1. Clone this repository
-```bash
-git clone https://github.com/turingmotors/heron.git
-cd heron
-```
+1. Generate model adapter (if needed):
+   If the adapter for your chosen model doesn't exist in the `plugins` directory, you can either use the `generate_adapter.py` script to automatically create one, or implement it yourself by referring to existing adapters:
+   ```
+   python scripts/generate_adapter.py <model_name>
+   ```
+   Replace `<model_name>` with the name or path of your model.
 
-## 2. Install Packages
-We recommend using virtual environment to install the required packages. If you want to install the packages globally, use `pip install -r requirements.txt` instead.
-### 2-a. Poetry (Recommended)
-Using [pyenv](https://github.com/pyenv/pyenv) and [Poetry](https://python-poetry.org/), you can install the required packages as follows:
-```bash
-# install pyenv environment
-pyenv install 3.10
-pyenv local 3.10
+2. Configuration:
+   Customize benchmark settings in the `config.yaml` file. You can also add new benchmarks by adding configuration files to the `configs/benchmarks` directory. This allows for easy expansion of the evaluation suite with custom benchmarks.
 
-# install packages from pyproject.toml
-poetry install
+3. Run the evaluation:
+   ```
+   python3 run_eval.py
+   ```
 
-# install local package
-pip install --upgrade pip  # enable PEP 660 support
-pip install -e .
+## Benchmark Datasets
 
-# for development, install pre-commit
-pre-commit install
-``````
+The datasets (LLaVA-Bench-In-the-Wild and Japanese HERON Bench) will be automatically downloaded using Weights & Biases Artifacts when you run the evaluation.
 
-### 2-b. Anaconda
-Using [Anaconda](https://www.anaconda.com/), you can install the required packages as follows:
-```bash
-conda create -n heron python=3.10 -y
-conda activate heron
-pip install --upgrade pip  # enable PEP 660 support
+1. LLaVA-Bench-In-the-Wild (Japanese version)
+2. Japanese HERON Bench
 
-pip install -r requirements.txt
-pip install -e .
+## Result Visualization
 
-# for development, install pre-commit
-pre-commit install
-```
+Use Weights & Biases to track and visualize benchmark results in real-time.
 
-## 3. Resister for Llama-2 models
-To use Llama-2 models, you need to register for the models.
-First, you request access to the llama-2 models, in [Hugging Face page](https://huggingface.co/meta-llama/Llama-2-7b) and [Meta website](https://ai.meta.com/resources/models-and-libraries/llama-downloads/).
+## License
 
-Please sign-in the Hugging Face account.
-```bash
-huggingface-cli login
-```
+This project is released under the Apache License 2.0. See the [LICENSE](./LICENSE) file for details.
 
-## 4. Flash Attention
-Make sure that your environment can use the CUDA toolkit. See also [installation-and-features](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features) in flash-attention.
+## Acknowledgements
 
-To use flash-attention, you need to install following packages.
-```bash
-pip install packaging wheel
-pip uninstall -y ninja && pip install ninja --no-cache-dir
-pip install flash-attn --no-build-isolation
-```
-
-If flash-atten doesn't work, please install it from the source. （[Related issue](https://github.com/Dao-AILab/flash-attention/issues/821)）
-```bash
-cd /path/to/download
-git clone https://github.com/Dao-AILab/flash-attention.git
-cd flash-attention
-python setup.py install
-```
-
-# Training
-
-For learning, use the yaml configuration file under the `projects` directory.<br>
-For example, the contents of [projects/opt/exp001.yml](. /projects/opt/exp001.yml) has the following contents:
-
-```yaml
-training_config:
-  per_device_train_batch_size: 2
-  gradient_accumulation_steps: 4
-  num_train_epochs: 1
-  dataloader_num_workers: 16
-  fp16: true
-  optim: "adamw_torch"
-  learning_rate: 5.0e-5
-  logging_steps: 100
-  evaluation_strategy: "steps"
-  save_strategy: "steps"
-  eval_steps: 4000
-  save_steps: 4000
-  save_total_limit: 1
-  deepspeed: ./configs/deepspeed/ds_config_zero1.json
-  output_dir: ./output/
-  report_to: "wandb"
-
-model_config:
-  fp16: true
-  pretrained_path: # None or path to model weight
-  model_type: git_llm
-  language_model_name: facebook/opt-350m
-  vision_model_name: openai/clip-vit-base-patch16
-  num_image_with_embedding: 1 # if 1, no img_temporal_embedding
-  max_length: 512
-  keys_to_finetune:
-    - visual_projection
-    - num_image_with_embedding
-  keys_to_freeze: []
-
-  use_lora: true
-  lora:
-    r: 8
-    lora_alpha: 32
-    target_modules:
-      - q_proj
-      - k_proj
-      - v_proj
-    lora_dropout: 0.01
-    bias: none
-    task_type: CAUSAL_LM
-
-dataset_config_path:
-  - ./configs/datasets/m3it.yaml
-```
-
-`training_config` sets the training configuration, `model_config` sets the model configuration, and `dataset_config_path` sets the dataset configuration.<br>
-The following LLM modules are currently supported for `model_type`. We plan to add more supported modules in the future.
-
-- [LLama-2](https://ai.meta.com/llama/)
-- [MPT](https://github.com/mosaicml/llm-foundry)
-- [OPT](https://huggingface.co/docs/transformers/model_doc/opt)
-- [GPT-NeoX](https://github.com/EleutherAI/gpt-neox)
-- [Japanese StableLM](https://huggingface.co/stabilityai/japanese-stablelm-base-alpha-7b)
-- [ELYZA-japanese-Llama-2](https://huggingface.co/elyza/ELYZA-japanese-Llama-2-7b-fast)
-
-To start learning, execute the following command.
-
-```bash
-./scripts/run.sh
-```
-
-GPU is required for learning; we have tested on Ubuntu 20.04, CUDA 11.7.
-
-# Evaluation
-
-You can get the pretrained weight form Hugging Face Hub: [turing-motors/heron-chat-git-ja-stablelm-base-7b-v1](https://huggingface.co/turing-motors/heron-chat-git-ja-stablelm-base-7b-v1)<br>
-See also [notebooks](./notebooks).
-
-```python
-import requests
-from PIL import Image
-
-import torch
-from transformers import AutoProcessor
-from heron.models.git_llm.git_japanese_stablelm_alpha import GitJapaneseStableLMAlphaForCausalLM
-
-device_id = 0
-
-# prepare a pretrained model
-model = GitJapaneseStableLMAlphaForCausalLM.from_pretrained(
-    'turing-motors/heron-chat-git-ja-stablelm-base-7b-v1', torch_dtype=torch.float16
-)
-model.eval()
-model.to(f"cuda:{device_id}")
-
-# prepare a processor
-processor = AutoProcessor.from_pretrained('turing-motors/heron-chat-git-ja-stablelm-base-7b-v1')
-
-# prepare inputs
-url = "https://www.barnorama.com/wp-content/uploads/2016/12/03-Confusing-Pictures.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-text = f"##human: What is this picture?\n##gpt: "
-
-# do preprocessing
-inputs = processor(
-    text,
-    image,
-    return_tensors="pt",
-    truncation=True,
-)
-inputs = {k: v.to(f"cuda:{device_id}") for k, v in inputs.items()}
-
-# set eos token
-eos_token_id_list = [
-    processor.tokenizer.pad_token_id,
-    processor.tokenizer.eos_token_id,
-]
-
-# do inference
-with torch.no_grad():
-    out = model.generate(**inputs, max_length=256, do_sample=False, temperature=0., eos_token_id=eos_token_id_list)
-
-# print result
-print(processor.tokenizer.batch_decode(out)[0])
-```
-
-### Pretrained Models
-
-|model|LLM module|adapter|size|
-|:----:|:----|:----|:----|
-|[heron-chat-git-ja-stablelm-base-7b-v1](https://huggingface.co/turing-motors/heron-chat-git-ja-stablelm-base-7b-v1)|Japanese StableLM Base Alpha|GIT|7B|
-|[heron-chat-blip-ja-stablelm-base-7b-v1-llava-620k](https://huggingface.co/turing-motors/heron-chat-blip-ja-stablelm-base-7b-v1-llava-620k)|Japanese StableLM Base Alpha|BLIP|7B|
-|[heron-chat-blip-ja-stablelm-base-7b-v1](https://huggingface.co/turing-motors/heron-chat-blip-ja-stablelm-base-7b-v1)|Japanese StableLM Base Alpha|BLIP|7B|
-|[heron-chat-blip-ja-stablelm-base-7b-v0](https://huggingface.co/turing-motors/heron-chat-blip-ja-stablelm-base-7b-v0)|Japanese StableLM Base Alpha|BLIP|7B|
-|[heron-chat-git-ja-stablelm-base-7b-v0](https://huggingface.co/turing-motors/heron-chat-git-ja-stablelm-base-7b-v0)|Japanese StableLM Base Alpha|GIT|7B|
-|[heron-chat-git-ELYZA-fast-7b-v0](https://huggingface.co/turing-motors/heron-chat-git-ELYZA-fast-7b-v0)|ELYZA|GIT|7B|
-|[heron-chat-git-Llama-2-7b-v0](https://huggingface.co/turing-motors/heron-chat-git-Llama-2-7b-v0)|Llama-2|GIT|7B|
-|[heron-preliminary-git-Llama-2-70b-v0](https://huggingface.co/turing-motors/heron-preliminary-git-Llama-2-70b-v0) *1|Llama-2|GIT|70B|
-*1 This model only applies to pre-training of adapters.
-
-### Datasets
-LLava datasets translated into Japanese.<br>
-- [LLaVA-Instruct-150K-JA](https://huggingface.co/datasets/turing-motors/LLaVA-Instruct-150K-JA)
-- [LLaVA-v1.5-Instruct-620K-JA](https://huggingface.co/datasets/turing-motors/LLaVA-v1.5-Instruct-620K-JA)
-- [LLaVA-Pretrain-JA](https://huggingface.co/datasets/turing-motors/LLaVA-Pretrain-JA)
-
-Evaluation dataset for Heron-Bench.<br>
-- [Japanese-Heron-Bench](https://huggingface.co/datasets/turing-motors/Japanese-Heron-Bench)
-
-# Citation
-
-If you find Heron useful for your research and applications, please cite using this BibTex:
-```bibtex
-@misc{inoue2024heronbench,
-      title={Heron-Bench: A Benchmark for Evaluating Vision Language Models in Japanese}, 
-      author={Yuichi Inoue and Kento Sasaki and Yuma Ochi and Kazuki Fujii and Kotaro Tanahashi and Yu Yamaguchi},
-      year={2024},
-      eprint={2404.07824},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
-}
-```
-
-# Organization
-
-[Turing Inc.](https://www.turing-motors.com/en)
-
-# License
-
-Released under the [Apache License 2.0](./LICENSE).
-
-# Acknowledgements
-
-- [GenerativeImage2Text](https://github.com/microsoft/GenerativeImage2Text): The main idia of the model is based on original GIT.
-- [Llava](https://github.com/haotian-liu/LLaVA): This project is learned a lot from the great Llava project.
-- [GIT-LLM](https://github.com/Ino-Ichan/GIT-LLM)
+We would like to express our gratitude to Turing Inc. for their technical support in Vision and Language models and evaluation methodologies. Their expertise and contributions have been invaluable to this project.

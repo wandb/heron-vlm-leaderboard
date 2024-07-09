@@ -1,0 +1,20 @@
+defaults:
+  - benchmarks:
+      - llava
+      - heron
+  - _self_
+
+datasets:
+ llava_bench_in_the_wild_artifact_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild:v0'
+ llava_bench_in_the_wild_reference_path: 'vision-language-leaderboard/heron-leaderboard/llava-bench-in-the-wild-reference:v0'
+ japanese_heron_bench_artifact_path: 'vision-language-leaderboard/heron-leaderboard/japanese-heron-bench:v0'
+ japanese_heron_bench_reference_path: 'vision-language-leaderboard/heron-leaderboard/heron-bench-reference:v0'
+
+device_id: 0
+
+generation:
+  args:
+    max_length: 512
+    temperature: 0.7
+    do_sample: true
+    no_repeat_ngram_size: 3

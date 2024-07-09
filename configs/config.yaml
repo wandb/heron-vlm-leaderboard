@@ -1,0 +1,12 @@
+defaults:
+  - base_config
+  - _self_
+
+model:
+  pretrained_model_name_or_path: "claude-3-5-sonnet-20240620"
+
+wandb:
+ log: true
+ entity: "vision-language-leaderboard"
+ project: "heron-leaderboard"
+ run_name: "claude-3-5-sonnet-20240620"
