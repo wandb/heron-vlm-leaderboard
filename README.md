@@ -1,4 +1,4 @@
-[Header Image](header.png)
+![Header Image](header.png)
 
 # [Heron Vision Language Leaderboard](http://vlm.nejumi.ai)
 
