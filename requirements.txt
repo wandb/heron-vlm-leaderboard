@@ -16,3 +16,4 @@ transformers_stream_generator
 torchvision
 tiktoken
 matplotlib
+timeout-decorator

@@ -21,6 +21,7 @@ setup(
         'matplotlib',
         'torchvision',
         'transformers_stream_generator',
+        'timeout-decorator',
     ],
     entry_points={
         'console_scripts': [
