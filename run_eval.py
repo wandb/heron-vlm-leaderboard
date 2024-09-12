@@ -54,6 +54,7 @@ async def async_main(cfg: DictConfig) -> None:
         radar_df = lb_df.drop(['model_name'] + [f"ave_{name}" for name in benchmark_names], axis=1)
         radar_df = radar_df.T.reset_index()
         radar_df.columns = ['category', 'score']
+        radar_df = radar_df.sort_values('category')
         
         # Log to wandb
         wandb.log({
