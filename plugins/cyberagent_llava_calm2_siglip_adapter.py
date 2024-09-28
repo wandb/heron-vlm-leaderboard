@@ -36,7 +36,7 @@ ASSISTANT: """
             
             generate_ids = self.model.generate(
                 **inputs,
-                max_length=self.config.get('max_length', 256),
+                max_length=self.config.get('max_length', 512),
                 do_sample=self.config.get('do_sample', False),
                 temperature=self.config.get('temperature', 0.7),
                 no_repeat_ngram_size=self.config.get('no_repeat_ngram_size', 3),
