@@ -11,12 +11,12 @@ from plugins.base_adapter import BaseAdapter
 from src.llm_judge import LLMJudge
 
 async def load_questions(path: str) -> List[Dict[str, Any]]:
-    with open(path, "r") as file:
+    with open(path, "r", encoding='utf-8') as file:
         return [json.loads(line) for line in file]
 
 def save_results(results: List[Dict[str, Any]], output_path: str, output_model_name: str) -> None:
     output_file = os.path.join(output_path, f"{output_model_name}_result.jsonl")
-    with open(output_file, "w") as f:
+    with open(output_file, "w", encoding='utf-8') as f:
         for result in results:
             f.write(json.dumps(result, ensure_ascii=False) + "\n")
 async def process_questions(
