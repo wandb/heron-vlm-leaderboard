@@ -7,12 +7,14 @@ import traceback
 import re
 from typing import Dict, Any
 from anthropic import Anthropic
+from openai import OpenAI
 from huggingface_hub import hf_hub_download
 import timeout_decorator
 
 class AdapterGenerator:
     def __init__(self):
-        self.client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        self.anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.max_retries = 5
         self.cache_dir = "adapter_cache"
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -59,17 +61,33 @@ class AdapterGenerator:
         print("Creating adapter generation prompt")
         prompt = self._create_adapter_generation_prompt(model_name, readme_content, error_context)
 
-        print("Generating adapter code using Anthropic API")
-        response = self.client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=4000,
-            temperature=0.2,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
+        print("Generating adapter code using LLM API")
+        # Try OpenAI first
+        try:
+            if os.getenv("OPENAI_API_KEY"):
+                response = self.openai_client.chat.completions.create(
+                    model="o1-2024-12-17",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_completion_tokens=4000,
+                )
+                generated_code = response.choices[0].message.content
+            else:
+                raise Exception("OpenAI API key not found")
+        except Exception as e:
+            print(f"OpenAI generation failed: {str(e)}, falling back to Claude")
+            # Fallback to Claude
+            response = self.anthropic_client.messages.create(
+                model="claude-3-sonnet-20240229",
+                max_tokens=4000,
+                temperature=0.2,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            generated_code = response.content[0].text
 
-        generated_code = response.content[0].text
         print("Adapter code generated successfully")
         return generated_code
 
@@ -132,6 +150,8 @@ class AdapterGenerator:
 
         Important: Your response should contain ONLY the Python code, without any additional text or explanations. Do not include Markdown code block markers (```python or ```) in your response.
 
+        max_tokens should be 512.
+        
         The adapter should follow this structure:
 
         import torch
